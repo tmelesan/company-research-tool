@@ -250,7 +250,6 @@ async def get_financials(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.get("/companies/{company_name}/comprehensive",
-         response_model=CompanyDataResponse,
          summary="Get comprehensive company data",
          description="Retrieve all available information about the company")
 async def get_comprehensive_data(
@@ -265,6 +264,50 @@ async def get_comprehensive_data(
         return result
     except Exception as e:
         logger.error(f"Error getting comprehensive data for {company_name}: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.get("/companies/{company_name}/all",
+         summary="Get all company research data (CLI --all equivalent)",
+         description="Get all company information aggregated like CLI --all flag. Returns the same detailed structure as CLI.")
+async def get_all_company_data(
+    company_name: str = Path(..., description="Name of the company", min_length=1),
+    news_limit: int = Query(5, description="Maximum number of news items to return", ge=1, le=20)
+):
+    """Get all company research data - equivalent to CLI --all flag"""
+    try:
+        if not researcher:
+            raise HTTPException(status_code=503, detail="Service not initialized")
+        
+        # Aggregate all research types like CLI --all does
+        results = {}
+        
+        # Company existence check
+        existence_result = researcher.check_company_exists(company_name)
+        results['existence'] = existence_result
+        
+        # Products and services
+        products_result = researcher.get_company_products_services(company_name)
+        results['products_services'] = products_result
+        
+        # Leadership information
+        leadership_result = researcher.get_company_leadership(company_name)
+        results['leadership'] = leadership_result
+        
+        # Recent news
+        news_result = researcher.get_company_news(company_name, limit=news_limit)
+        results['news'] = news_result
+        
+        # Competitive analysis
+        competitive_result = researcher.get_competitive_analysis(company_name)
+        results['competitive_analysis'] = competitive_result
+        
+        # Financial information
+        financials_result = researcher.get_company_financials(company_name)
+        results['financials'] = financials_result
+        
+        return results
+    except Exception as e:
+        logger.error(f"Error getting all data for {company_name}: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 # Error handlers

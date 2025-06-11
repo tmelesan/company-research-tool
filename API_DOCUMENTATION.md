@@ -46,6 +46,8 @@ The API will be available at:
 
 ## 🔧 API Usage Examples
 
+**⚠️ Note:** The API returns the exact same detailed, structured data as the CLI tool. These are real response formats from the Company Research Tool.
+
 ### 1. Check Company Existence
 
 ```bash
@@ -57,8 +59,8 @@ curl -X GET "http://localhost:8000/companies/Apple%20Inc./exists"
 ```json
 {
   "exists": "Yes",
-  "reason": "Apple Inc. is a well-known multinational technology company...",
-  "industry": "Technology",
+  "reason": "Apple Inc. is a well-known, publicly traded multinational technology company based in Cupertino, California.",
+  "industry": "Technology, Consumer Electronics, Software",
   "website_found": true,
   "website": "https://www.apple.com",
   "domain": "apple.com"
@@ -68,18 +70,31 @@ curl -X GET "http://localhost:8000/companies/Apple%20Inc./exists"
 ### 2. Get Products and Services
 
 ```bash
-curl -X GET "http://localhost:8000/companies/Microsoft/products-services"
+curl -X GET "http://localhost:8000/companies/Amazon/products-services"
 ```
 
 **Response:**
 
 ```json
 {
-  "products": ["Windows", "Office 365", "Xbox", "Azure"],
-  "services": ["Cloud Computing", "Software Development", "Gaming"],
-  "confidence": "High",
-  "business_model": "Software and Cloud Services",
-  "target_market": "Enterprise and Consumer"
+  "products": [
+    "Electronics (Kindle, Fire tablets, Echo devices)",
+    "Books (physical and digital)",
+    "Apparel and Accessories",
+    "Home and Kitchen goods",
+    "Beauty and Personal Care products",
+    "Grocery (Amazon Fresh, Whole Foods Market)",
+    "Amazon Basics (private label products)"
+  ],
+  "services": [
+    "E-commerce (online retail)",
+    "Cloud Computing (Amazon Web Services - AWS)",
+    "Digital Streaming (Amazon Prime Video, Amazon Music)",
+    "Digital Advertising",
+    "Logistics and Fulfillment (Fulfillment by Amazon - FBA)",
+    "Artificial Intelligence (AI) and Machine Learning (ML) services"
+  ],
+  "confidence": "High"
 }
 ```
 
@@ -94,15 +109,25 @@ curl -X GET "http://localhost:8000/companies/Tesla/leadership?domain=tesla.com"
 ```json
 {
   "data_available": true,
+  "company_name": "Tesla",
   "leadership_team": [
     {
       "name": "Elon Musk",
-      "position": "CEO",
-      "background": "Entrepreneur and business magnate..."
+      "position": "CEO and Product Architect",
+      "background": "Entrepreneur and business magnate known for leading multiple companies including SpaceX and Tesla"
+    },
+    {
+      "name": "Zachary Kirkhorn",
+      "position": "CFO",
+      "background": "Former Senior Vice President of Finance at Tesla with extensive automotive industry experience"
+    },
+    {
+      "name": "Drew Baglino",
+      "position": "Senior Vice President, Powertrain and Energy Engineering",
+      "background": "Long-time Tesla executive responsible for vehicle engineering and energy products"
     }
   ],
-  "key_executives": [...],
-  "confidence": "High"
+  "source": "AI generated"
 }
 ```
 
@@ -118,10 +143,22 @@ curl -X GET "http://localhost:8000/companies/Google/news?limit=3"
 {
   "news_items": [
     {
-      "title": "Google Announces New AI Features",
-      "date": "2025-06-10",
-      "summary": "Google introduces advanced AI capabilities...",
+      "title": "Google Announces Major AI Breakthrough in Quantum Computing",
+      "date": "2025-06-01",
+      "summary": "Google researchers have achieved a significant milestone in quantum computing with their latest AI-powered quantum processor, demonstrating quantum supremacy in solving complex mathematical problems.",
       "source": "TechCrunch"
+    },
+    {
+      "title": "Alphabet Reports Strong Q1 2025 Earnings Driven by Cloud Growth",
+      "date": "2025-05-28",
+      "summary": "Google parent company Alphabet exceeded analyst expectations with robust revenue growth in its cloud computing division and continued strength in advertising revenue.",
+      "source": "Reuters"
+    },
+    {
+      "title": "Google Launches Enhanced Gemini AI Assistant Features",
+      "date": "2025-05-15",
+      "summary": "Google unveiled new capabilities for its Gemini AI assistant, including improved multimodal understanding and integration with Google Workspace applications.",
+      "source": "The Verge"
     }
   ],
   "data_confidence": "High",
@@ -139,18 +176,44 @@ curl -X GET "http://localhost:8000/companies/Netflix/competitive-analysis"
 
 ```json
 {
-  "main_competitors": ["Disney+", "Amazon Prime", "HBO Max"],
-  "market_position": "Market Leader",
-  "strengths": ["Content Library", "Global Reach", "Technology"],
-  "weaknesses": ["Increasing Competition", "Content Costs"],
-  "competitive_advantages": ["Original Content", "Recommendation Algorithm"]
+  "main_competitors": [
+    "Disney+ (The Walt Disney Company)",
+    "Amazon Prime Video (Amazon)",
+    "HBO Max (Warner Bros. Discovery)",
+    "Hulu (Disney)",
+    "Apple TV+ (Apple)",
+    "Paramount+ (Paramount Global)",
+    "Peacock (NBCUniversal)"
+  ],
+  "market_position": "Market Leader in Global Streaming",
+  "strengths": [
+    "Extensive global content library",
+    "Strong original content production",
+    "Advanced recommendation algorithm",
+    "Global market presence in 190+ countries",
+    "User-friendly interface and experience",
+    "Multiple pricing tiers and plans"
+  ],
+  "weaknesses": [
+    "Increasing content costs and competition for rights",
+    "Limited live sports content compared to competitors",
+    "Rising subscription costs may impact customer retention",
+    "Dependence on third-party content providers",
+    "Currency fluctuation impacts in international markets"
+  ],
+  "competitive_advantages": [
+    "First-mover advantage in streaming",
+    "Proprietary recommendation technology",
+    "Significant investment in original content",
+    "Global distribution network"
+  ]
 }
 ```
 
 ### 6. Get Financial Information
 
 ```bash
-curl -X GET "http://localhost:8000/companies/Amazon/financials"
+curl -X GET "http://localhost:8000/companies/Apple/financials"
 ```
 
 **Response:**
@@ -159,40 +222,109 @@ curl -X GET "http://localhost:8000/companies/Amazon/financials"
 {
   "data_available": true,
   "financial_information": {
-    "company": "Amazon Inc.",
-    "ticker": "AMZN",
+    "company": "Apple Inc.",
+    "ticker": "AAPL",
+    "lastUpdated": "Q1 2025",
     "financials": {
       "revenue": {
         "latestQuarter": {
-          "value": 143313000000,
-          "period": "Q4 2024",
+          "value": 119575000000,
+          "period": "Q1 2025",
           "currency": "USD"
         }
       },
-      "profit": {...},
-      "keyRatios": {...}
-    }
+      "profit": {
+        "latestQuarter": {
+          "value": 33916000000,
+          "period": "Q1 2025",
+          "currency": "USD"
+        }
+      },
+      "keyRatios": {
+        "peRatio": {
+          "value": 29.2,
+          "asOfDate": "2025-06-01"
+        },
+        "eps": {
+          "value": 2.18,
+          "asOfDate": "2025-06-01"
+        }
+      }
+    },
+    "recentNews": [
+      {
+        "headline": "Apple Reports Record Q1 Revenue of $119.6B",
+        "source": "Apple Inc.",
+        "date": "2025-02-01"
+      },
+      {
+        "headline": "iPhone 16 Sales Drive Strong Quarter for Apple",
+        "source": "Reuters",
+        "date": "2025-02-02"
+      }
+    ]
   },
   "source": "Gemini AI"
 }
 ```
 
-### 7. Get Comprehensive Data
+### 7. Get Comprehensive Data (Equivalent to CLI `--all` flag)
 
 ```bash
-curl -X GET "http://localhost:8000/companies/IBM/comprehensive"
+curl -X GET "http://localhost:8000/companies/Tesla/comprehensive"
 ```
 
 **Response:**
 
 ```json
 {
-  "company_name": "IBM",
+  "company_name": "Tesla, Inc.",
   "exists": true,
-  "description": "International Business Machines Corporation...",
-  "industry": "Technology",
-  "founding_year": 1911,
-  "headquarters": "Armonk, New York",
+  "description": "Tesla, Inc. is an American multinational automotive and clean energy company headquartered in Austin, Texas. Tesla designs and manufactures electric vehicles, battery energy storage systems, and related products and services.",
+  "industry": "Automotive, Clean Energy, Technology",
+  "founding_year": 2003,
+  "headquarters": "Austin, Texas, United States",
+  "products_services": [
+    "Model S (luxury sedan)",
+    "Model 3 (compact executive sedan)",
+    "Model X (mid-size SUV)",
+    "Model Y (compact SUV)",
+    "Cybertruck (pickup truck)",
+    "Tesla Semi (electric truck)",
+    "Tesla Roadster (sports car)",
+    "Powerwall (home battery)",
+    "Powerpack (commercial battery)",
+    "Megapack (utility-scale battery)",
+    "Solar panels and solar roof tiles",
+    "Supercharger network",
+    "Full Self-Driving (FSD) software"
+  ],
+  "key_people": [
+    "Elon Musk (CEO and Product Architect)",
+    "Zachary Kirkhorn (CFO)",
+    "Drew Baglino (SVP, Powertrain and Energy Engineering)",
+    "Lars Moravy (VP of Vehicle Engineering)"
+  ],
+  "competitors": [
+    "Ford (F-150 Lightning, Mustang Mach-E)",
+    "General Motors (Chevrolet Bolt, Cadillac Lyriq)",
+    "Volkswagen (ID series)",
+    "BMW (iX, i4)",
+    "Mercedes-EQS",
+    "Rivian (R1T, R1S)",
+    "Lucid Motors (Air)",
+    "NIO",
+    "BYD"
+  ],
+  "website": "https://www.tesla.com",
+  "social_media": {
+    "twitter": "@Tesla",
+    "instagram": "@teslamotors",
+    "youtube": "@Tesla"
+  },
+  "public_company": true,
+  "stock_symbol": "TSLA",
+  "estimated_size": "140,000+ employees",
   "data_confidence": "high",
   "data_sources": ["gemini_ai", "web_scraping"]
 }
@@ -330,7 +462,7 @@ For production deployment, consider:
 
 ## 📝 API Versioning
 
-Current API version: **2.1.1**
+Current API version: **2.2.0**
 
 The API version follows the same versioning as the main application and can be retrieved from:
 
