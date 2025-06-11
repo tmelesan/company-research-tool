@@ -16,6 +16,38 @@ A comprehensive Python tool for researching companies using Google's Gemini AI a
 - **Enhanced JSON Parsing**: Robust JSON parsing with fallback mechanisms for malformed responses
 - **Improved Financial Data**: Better prompts for real financial data extraction (no placeholders)
 - **Web Interface**: Beautiful Streamlit-based web UI with interactive dashboards and visualizations
+- **🆕 REST API**: Full-featured FastAPI service for programmatic access to all research capabilities
+
+## 🌐 Multiple Interface Options
+
+The Company Research Tool offers three different ways to access its capabilities:
+
+### 1. 🖥️ **Web Interface (Streamlit)**
+
+Beautiful, interactive web application with dashboards and visualizations.
+
+```bash
+./run_streamlit.sh
+# Access at: http://localhost:8501
+```
+
+### 2. 🔗 **REST API (FastAPI)**
+
+Professional REST API for integration with other applications and services.
+
+```bash
+./run_api.sh
+# API at: http://localhost:8000
+# Docs at: http://localhost:8000/docs
+```
+
+### 3. 💻 **Command Line Interface (CLI)**
+
+Direct command-line access for scripts and automation.
+
+```bash
+./run_cli.sh --company "Apple Inc." --all
+```
 
 ## 🆕 Recent Updates
 
@@ -148,7 +180,53 @@ Pass the API key directly when initializing the tool (see usage examples below).
 
 ## 🎯 Usage
 
-### Web Interface (Streamlit) - **NEW!** 🌐
+### 🔗 REST API (FastAPI) - **NEW!** 🚀
+
+Professional REST API for integration with other applications and programmatic access:
+
+```bash
+# Quick start - launches the API server
+./run_api.sh
+
+# Or manually
+source venv/bin/activate
+uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**API Features:**
+
+- 🌐 **RESTful Design**: Standard HTTP methods and status codes
+- 📚 **Interactive Documentation**: Auto-generated docs at `/docs` and `/redoc`
+- ⚡ **High Performance**: Built with FastAPI for speed and efficiency
+- 🔒 **Type Safety**: Full input/output validation with Pydantic
+- 🔄 **Async Support**: Non-blocking operations for better performance
+- 📊 **JSON Responses**: Structured, consistent response formats
+- 🛡️ **Error Handling**: Comprehensive error responses and logging
+- 🔧 **CORS Support**: Cross-origin requests enabled for web integration
+
+**API Endpoints:**
+
+- `GET /companies/{name}/exists` - Check company existence
+- `GET /companies/{name}/products-services` - Get products and services
+- `GET /companies/{name}/leadership` - Get leadership information
+- `GET /companies/{name}/news` - Get recent news
+- `GET /companies/{name}/competitive-analysis` - Get competitive analysis
+- `GET /companies/{name}/financials` - Get financial information
+- `GET /companies/{name}/comprehensive` - Get all company data
+
+**Quick API Example:**
+
+```bash
+# Check if Apple exists
+curl "http://localhost:8000/companies/Apple%20Inc./exists"
+
+# Get Microsoft's products and services
+curl "http://localhost:8000/companies/Microsoft/products-services"
+```
+
+📖 **Full API Documentation**: See [API_DOCUMENTATION.md](API_DOCUMENTATION.md) for complete usage guide.
+
+### 🌐 Web Interface (Streamlit)
 
 The easiest way to use the tool is through the beautiful web interface:
 
@@ -347,10 +425,20 @@ src/
     └── logger.py                  # Logging configuration
 
 # User Interfaces
+api.py                             # 🆕 FastAPI REST API service
 cli.py                             # Command-line interface
 streamlit_app.py                   # Web-based interface (Streamlit)
-run_streamlit.sh                   # Web app launcher script
+
+# Launcher Scripts
+run_api.sh                         # 🆕 Start FastAPI server
+run_cli.sh                         # Start CLI with secure API key input
+run_streamlit.sh                   # Start Streamlit web interface
+run_tests.sh                       # Run test suite
 ```
+
+run_streamlit.sh # Web app launcher script
+
+````
 
 ### Key Components
 
@@ -402,7 +490,7 @@ python -m pytest tests/test_company_researcher.py::TestCompanyResearcher::test_c
 
 # Run tests with coverage
 python -m pytest tests/ --cov=src --cov-report=html
-```
+````
 
 ### Secure Testing with API Key
 

@@ -17,18 +17,21 @@ This is a patch release that includes documentation improvements and build syste
 ### 🎯 **What's Included from v2.1.0**
 
 #### 🌐 **Streamlit Web Interface**
+
 - Beautiful, responsive web UI with real-time progress tracking
 - Interactive dashboards with charts, metrics, and visualizations
 - Research history management and export capabilities
 - Mobile-friendly design with secure API key input
 
 #### 🔧 **Enhanced Data Processing**
+
 - Robust JSON parsing with markdown code block handling
 - JavaScript comment support and manual extraction fallback
 - Improved financial data extraction with real data focus
 - Better error handling and data quality indicators
 
 #### 🐛 **Bug Fixes & Stability**
+
 - CLI syntax fixes and import issue resolution
 - Test suite enhancements and improved reliability
 - Graceful error handling when data is unavailable
