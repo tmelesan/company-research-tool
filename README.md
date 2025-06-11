@@ -19,6 +19,10 @@ A comprehensive Python tool for researching companies using Google's Gemini AI a
 
 ## 🆕 Recent Updates
 
+### Version 2.1.1 (June 2025)
+
+**Latest patch release with documentation and build system improvements.**
+
 ### Version 2.1.0 (June 2025)
 
 #### 🚀 Enhanced Financial Data Extraction

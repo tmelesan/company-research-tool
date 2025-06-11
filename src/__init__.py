@@ -15,7 +15,7 @@ def get_version():
         with open(version_file, 'r') as f:
             return f.read().strip()
     except FileNotFoundError:
-        return "2.1.0"  # Fallback version
+        return "2.1.1"  # Fallback version
 
 __version__ = get_version()
 __author__ = "Konstantinos"
