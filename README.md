@@ -68,8 +68,8 @@ A comprehensive Python tool for researching companies using Google's Gemini AI a
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
-cd search-company-gemini-tool
+git clone https://github.com/kpapap/company-research-tool.git
+cd company-research-tool
 ```
 
 ### 2. Set Up Python Environment
