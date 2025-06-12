@@ -178,6 +178,153 @@ cp .env.example .env
 
 Pass the API key directly when initializing the tool (see usage examples below).
 
+## 🐳 Docker Deployment
+
+For production deployment or containerized environments, you can build and run the Company Research Tool using Docker.
+
+### Build and Run Commands
+
+```bash
+# Build the Docker image
+docker build -t company-research-tool .
+
+# Run with environment variable for API key
+docker run -d \
+  --name company-research \
+  -p 8000:8000 \
+  -p 8501:8501 \
+  -e GEMINI_API_KEY="your_api_key_here" \
+  company-research-tool
+
+# Or run with interactive terminal
+docker run -it \
+  --name company-research \
+  -p 8000:8000 \
+  -p 8501:8501 \
+  -e GEMINI_API_KEY="your_api_key_here" \
+  company-research-tool
+```
+
+### Docker Compose (Recommended)
+
+Create a `.env` file with your API key:
+
+```bash
+GEMINI_API_KEY=your_api_key_here
+```
+
+Run with Docker Compose:
+
+```bash
+# Start services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+### Service Access
+
+Once the container is running, you can access:
+
+- **🔗 REST API**: http://localhost:8000
+- **📚 API Documentation**: http://localhost:8000/docs
+- **🌐 Web Interface**: http://localhost:8501
+- **🏥 Health Check**: http://localhost:8000/health
+
+### Production Considerations
+
+For production deployment:
+
+```dockerfile
+# Multi-stage build for smaller image
+FROM python:3.11-slim as builder
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+FROM python:3.11-slim
+WORKDIR /app
+
+# Copy dependencies from builder stage
+COPY --from=builder /root/.local /root/.local
+
+# Make sure scripts in .local are usable
+ENV PATH=/root/.local/bin:$PATH
+
+# Copy application code
+COPY . .
+
+# Security: Run as non-root user
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8000 8501
+CMD ["/app/start-services.sh"]
+```
+
+### Environment Variables
+
+| Variable         | Description                      | Default |
+| ---------------- | -------------------------------- | ------- |
+| `GEMINI_API_KEY` | Google Gemini API key (required) | -       |
+| `PORT`           | API server port                  | 8000    |
+| `STREAMLIT_PORT` | Web server port                  | 8501    |
+| `HOST`           | Server host address              | 0.0.0.0 |
+
+### Container Health Monitoring
+
+The container includes health checks for both services:
+
+```bash
+# Check container health
+docker ps
+docker logs company-research
+
+# Manual health checks
+curl http://localhost:8000/health
+curl http://localhost:8501/_stcore/health
+```
+
+### Running Individual Services
+
+If you prefer to run only one service, you can override the default command:
+
+```bash
+# Run only the API server
+docker run -d \
+  --name company-research-api \
+  -p 8000:8000 \
+  -e GEMINI_API_KEY="your_api_key_here" \
+  company-research-tool \
+  uvicorn api:app --host 0.0.0.0 --port 8000
+
+# Run only the web interface
+docker run -d \
+  --name company-research-web \
+  -p 8501:8501 \
+  -e GEMINI_API_KEY="your_api_key_here" \
+  company-research-tool \
+  streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+```
+
+### Development with Docker
+
+For development with live reload:
+
+```bash
+# Mount source code for development
+docker run -it \
+  -p 8000:8000 \
+  -p 8501:8501 \
+  -e GEMINI_API_KEY="your_api_key_here" \
+  -v $(pwd):/app \
+  company-research-tool
+```
+
 ## 🎯 Usage
 
 ### 🔗 REST API (FastAPI) - **NEW!** 🚀

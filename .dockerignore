@@ -1,0 +1,54 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Test outputs
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary files
+*.tmp
+*.log
+.env.local
+.env.development
+.env.test
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# API test results (not needed in container)
+api_test_result.json
+api_all_response.json
+amazon.json
+report_*.json
+
+# Documentation (can be excluded for smaller image)
+*.md
+docs/
+
+# Scripts that aren't needed in container
+run_*.sh
