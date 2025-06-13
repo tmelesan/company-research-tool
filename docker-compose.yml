@@ -1,7 +1,7 @@
 services:
   company-research:
-    build: .
-    container_name: company-research-tool
+    image: search-company-tool:v2.3.1
+    container_name: search-company-tool
     ports:
       - '8000:8000' # API Server
       - '8501:8501' # Web Interface
@@ -17,6 +17,7 @@ services:
     volumes:
       # Optional: Mount for persistent logs
       - ./logs:/app/logs
+    pull_policy: 'if_not_present'
     networks:
       - company-research-network
 
