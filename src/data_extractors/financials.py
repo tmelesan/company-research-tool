@@ -1,26 +1,62 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List, Union
 from ..services.gemini_service import GeminiService
 from ..services.web_scraper import WebScraper
+from ..services.financial_service import FinancialService
 from ..utils.logger import setup_logger
 
 logger = setup_logger()
 
 class CompanyFinancialsExtractor:
-    def __init__(self, gemini_service: GeminiService, web_scraper: WebScraper = None):
+    def __init__(self, gemini_service: GeminiService, web_scraper: WebScraper = None, financial_service: FinancialService = None):
+        """
+        Initialize the financial data extractor.
+        
+        Args:
+            gemini_service (GeminiService): Service for AI-powered analysis
+            web_scraper (WebScraper, optional): Service for web scraping
+            financial_service (FinancialService, optional): Service for financial data retrieval
+        """
         self.gemini_service = gemini_service
         self.web_scraper = web_scraper
+        self._financial_service = financial_service
     
-    def get_financials(self, company_name: str, domain: str = None) -> Dict[str, Any]:
+    def _get_ticker_symbol(self, company_name: str) -> Optional[str]:
+        """
+        Get the stock ticker symbol for a company using Gemini AI.
+        
+        Args:
+            company_name (str): Name of the company
+            
+        Returns:
+            str: Stock ticker symbol if found, None otherwise
+        """
+        try:
+            prompt = f"What is the stock ticker symbol for {company_name}? Please provide only the symbol without any explanation."
+            response = self.gemini_service.generate_response(prompt)
+            # Extract ticker from response
+            if response and isinstance(response, dict) and 'content' in response:
+                ticker_text = response['content'].strip()
+                ticker = ticker_text.split()[0].upper() if ticker_text else None
+                return ticker
+            return None
+        except Exception as e:
+            logger.error(f"Error getting ticker symbol for {company_name}: {e}")
+            return None
+
+    def get_financials(self, company_name: str, domains: Union[str, List[str]] = None) -> Dict[str, Any]:
         """
         Get financial information about a company.
         
         Args:
             company_name (str): Name of the company
-            domain (str, optional): Company's website domain if known
+            domains (Union[str, List[str]], optional): Company's website domain(s)
             
         Returns:
             dict: Financial information about the company
         """
+        # Convert single domain to list for consistent handling
+        if isinstance(domains, str):
+            domains = [domains]
         try:
             result = {
                 "data_available": False,
@@ -28,18 +64,52 @@ class CompanyFinancialsExtractor:
                 "financial_information": {}
             }
             
-            # First try web scraping if enabled
-            if self.web_scraper:
-                # If domain is provided, use it directly
-                if domain:
-                    logger.info(f"Using provided domain {domain} to extract financial information")
-                    website_data = self.web_scraper.extract_from_website(domain)
+            # Get stock ticker symbol
+            ticker = self._get_ticker_symbol(company_name)
+            if ticker:
+                logger.info(f"Found ticker symbol {ticker} for {company_name}")
+                
+                # Get real-time market data
+                stock_info = self.financial_service.get_stock_info(ticker)
+                if stock_info:
+                    result["data_available"] = True
+                    result["financial_information"]["market_data"] = stock_info
+                    result["source"] = "market_data"
                     
-                    if "financial_information" in website_data and any(website_data["financial_information"].values()):
-                        result["data_available"] = True
-                        result["website"] = domain
-                        result["financial_information"] = website_data["financial_information"]
-                        result["source"] = "website"
+                # Get financial statements
+                statements = self.financial_service.get_financial_statements(ticker)
+                if statements:
+                    result["data_available"] = True
+                    result["financial_information"]["statements"] = statements
+                      # Fallback to web scraping if enabled and no market data available
+            if self.web_scraper and not result["data_available"]:
+                # If domains are provided, try each one
+                if domains:
+                    result["websites_checked"] = []
+                    for domain in domains:
+                        logger.info(f"Using provided domain {domain} to extract financial information")
+                        website_data = self.web_scraper.extract_from_website(domain)
+                        
+                        domain_result = {
+                            "domain": domain,
+                            "success": False,
+                            "data": {}
+                        }
+                        
+                        if "financial_information" in website_data and any(website_data["financial_information"].values()):
+                            result["data_available"] = True
+                            domain_result["success"] = True
+                            domain_result["data"] = website_data["financial_information"]
+                            
+                            # Merge financial information from multiple sources
+                            if "web_data" not in result["financial_information"]:
+                                result["financial_information"]["web_data"] = {}
+                            result["financial_information"]["web_data"][domain] = website_data["financial_information"]
+                        
+                        result["websites_checked"].append(domain_result)
+                    
+                    if result["data_available"]:
+                        result["source"] = "multiple_websites"
                 else:
                     # Search for the company website
                     logger.info(f"Searching for website of {company_name}")

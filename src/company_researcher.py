@@ -1,6 +1,7 @@
 from typing import Dict, Any, Optional
 from .services.gemini_service import GeminiService
 from .services.web_scraper import WebScraper
+from .services.financial_service import FinancialService
 from .data_extractors.company_existence import CompanyExistenceChecker
 from .data_extractors.products_services import ProductServiceExtractor
 from .data_extractors.leadership import LeadershipExtractor
@@ -13,17 +14,19 @@ from .utils.logger import setup_logger
 logger = setup_logger()
 
 class CompanyResearcher:
-    def __init__(self, api_key=None, use_web_scraping=True):
+    def __init__(self, api_key=None, use_web_scraping=True, alpha_vantage_key=None):
         """
         Initialize the company researcher tool with Google Gemini API.
         
         Args:
             api_key (str, optional): Google Gemini API key
             use_web_scraping (bool): Whether to use web scraping for additional information
+            alpha_vantage_key (str, optional): Alpha Vantage API key for financial data
         """
         # Initialize services
         self.gemini_service = GeminiService(api_key)
         self.web_scraper = WebScraper() if use_web_scraping else None
+        self.financial_service = FinancialService(alpha_vantage_key)
         
         # Initialize data extractors
         self.existence_checker = CompanyExistenceChecker(self.gemini_service, self.web_scraper)
@@ -31,7 +34,7 @@ class CompanyResearcher:
         self.leadership_extractor = LeadershipExtractor(self.gemini_service, self.web_scraper)
         self.news_extractor = CompanyNewsExtractor(self.gemini_service)
         self.competitive_analyzer = CompetitiveAnalysisExtractor(self.gemini_service)
-        self.financials_extractor = CompanyFinancialsExtractor(self.gemini_service, self.web_scraper)
+        self.financials_extractor = CompanyFinancialsExtractor(self.gemini_service, self.web_scraper, self.financial_service)
         self.data_extractor = CompanyDataExtractor(self.gemini_service, self.web_scraper)
     
     def check_company_exists(self, company_name: str) -> Dict[str, Any]:

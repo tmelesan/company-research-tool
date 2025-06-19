@@ -96,3 +96,36 @@ class WebScraper:
                 "data_found": False,
                 "error": str(e)
             }
+    
+    def verify_domain(self, domain: str) -> bool:
+        """
+        Verify if a domain is accessible and returns a valid response.
+        
+        Args:
+            domain (str): The domain to verify (e.g., 'example.com')
+            
+        Returns:
+            bool: True if domain is accessible, False otherwise
+        """
+        try:
+            # Ensure domain has a scheme
+            if not domain.startswith(('http://', 'https://')):
+                domain = f'https://{domain}'
+            
+            # Parse the domain to ensure it's valid
+            parsed = urlparse(domain)
+            if not parsed.netloc:
+                return False
+                
+            # Try to access the domain
+            response = requests.get(domain, 
+                                 headers={'User-Agent': self.user_agent},
+                                 timeout=self.timeout,
+                                 allow_redirects=True)
+            
+            # Check if we got a successful response
+            return response.status_code == 200
+            
+        except Exception as e:
+            logger.debug(f"Error verifying domain {domain}: {str(e)}")
+            return False

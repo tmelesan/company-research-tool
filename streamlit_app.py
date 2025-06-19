@@ -42,6 +42,17 @@ st.markdown("""
         border-radius: 0.5rem;
         margin: 0.5rem 0;
     }
+    .domain-input {
+        margin: 0.5rem 0;
+        padding: 0.5rem;
+        border: 1px solid #e0e0e0;
+        border-radius: 0.25rem;
+    }
+    .domain-list {
+        max-height: 200px;
+        overflow-y: auto;
+        margin: 0.5rem 0;
+    }
     .success-box {
         background-color: #d4edda;
         border: 1px solid #c3e6cb;
@@ -77,6 +88,8 @@ def init_session_state():
         st.session_state.api_key_set = False
     if 'researcher' not in st.session_state:
         st.session_state.researcher = None
+    if 'domains' not in st.session_state:
+        st.session_state.domains = []
     if 'last_research_company' not in st.session_state:
         st.session_state.last_research_company = None
     if 'show_download_section' not in st.session_state:
@@ -106,11 +119,13 @@ def setup_api_key():
 
 def create_researcher(api_key: str, use_web_scraping: bool = True) -> CompanyResearcher:
     """Create and cache the CompanyResearcher instance."""
+    alpha_vantage_key = os.getenv('ALPHA_VANTAGE_KEY')
     if (st.session_state.researcher is None or 
         getattr(st.session_state.researcher, 'use_web_scraping', True) != use_web_scraping):
         st.session_state.researcher = CompanyResearcher(
             api_key=api_key,
-            use_web_scraping=use_web_scraping
+            use_web_scraping=use_web_scraping,
+            alpha_vantage_key=alpha_vantage_key
         )
     return st.session_state.researcher
 
@@ -368,6 +383,91 @@ def create_summary_dashboard(results: Dict[str, Any], company_name: str) -> None
         if 'financials' in results:
             format_financial_data(results['financials'])
 
+def manage_domains():
+    """Domain management section in the sidebar."""
+    st.sidebar.markdown("### 🌐 Domain Management")
+    
+    # Single domain input
+    new_domain = st.sidebar.text_input(
+        "Add Domain:",
+        placeholder="e.g., example.com",
+        help="Enter a domain name without http:// or www"
+    )
+    
+    # Bulk domain input
+    st.sidebar.markdown("#### Bulk Add Domains")
+    bulk_domains = st.sidebar.text_area(
+        "Add Multiple Domains:",
+        placeholder="Enter domains separated by commas or new lines",
+        help="Enter multiple domains separated by commas or new lines"
+    )
+    
+    # Add domain button
+    col1, col2 = st.sidebar.columns([1, 1])
+    with col1:
+        if st.button("Add Domain", key="add_single_domain"):
+            if new_domain:
+                if new_domain not in st.session_state.domains:
+                    st.session_state.domains.append(new_domain.strip())
+                    st.success(f"Added domain: {new_domain}")
+                else:
+                    st.warning("Domain already exists!")
+    
+    with col2:
+        if st.button("Add Bulk", key="add_bulk_domains"):
+            if bulk_domains:
+                # Split by commas and newlines
+                new_domains = [d.strip() for d in bulk_domains.replace('\n', ',').split(',')]
+                new_domains = [d for d in new_domains if d]  # Remove empty strings
+                
+                # Add unique domains
+                added = 0
+                for domain in new_domains:
+                    if domain not in st.session_state.domains:
+                        st.session_state.domains.append(domain)
+                        added += 1
+                
+                if added > 0:
+                    st.success(f"Added {added} new domain(s)")
+                else:
+                    st.info("No new domains to add")
+    
+    # Display and manage current domains
+    if st.session_state.domains:
+        st.sidebar.markdown("#### Current Domains")
+        for i, domain in enumerate(st.session_state.domains):
+            col1, col2 = st.sidebar.columns([3, 1])
+            with col1:
+                st.text(domain)
+            with col2:
+                if st.button("🗑️", key=f"remove_{i}"):
+                    st.session_state.domains.pop(i)
+                    st.rerun()
+        
+        if st.sidebar.button("Clear All Domains"):
+            st.session_state.domains = []
+            st.rerun()
+    
+    return st.session_state.domains
+
+def display_comprehensive_data(data: Dict[str, Any]) -> None:
+    """Display comprehensive company data."""
+    if 'error' in data:
+        st.error(f"❌ Error: {data['error']}")
+    else:
+        st.write(f"**Company:** {data.get('company_name', 'N/A')}")
+        st.write(f"**Industry:** {data.get('industry', 'N/A')}")
+        st.write(f"**Description:** {data.get('description', 'N/A')}")
+        
+        if 'websites_checked' in data:
+            st.subheader("🌐 Websites Analyzed")
+            for website in data['websites_checked']:
+                status = "✅" if website['success'] else "❌"
+                st.write(f"{status} {website['domain']}")
+        
+        if 'data_sources' in data:
+            st.write(f"**Data Sources:** {', '.join(data['data_sources'])}")
+
 def main():
     """Main Streamlit application."""
     init_session_state()
@@ -393,6 +493,9 @@ def main():
         placeholder="e.g., Apple Inc., Microsoft Corporation",
         help="Enter the full company name for best results"
     )
+    
+    # Domain management
+    domains = manage_domains()
     
     # Research options
     st.sidebar.markdown("### 📊 Research Types")
@@ -465,7 +568,8 @@ def main():
             
             if research_options['financials']:
                 status_text.text("💰 Extracting financial data...")
-                results['financials'] = researcher.get_company_financials(company_name)
+                # Pass all configured domains to the financial extractor
+                results['financials'] = researcher.get_company_financials(company_name, domain=domains[0] if domains else None)
                 completed_tasks += 1
                 progress_bar.progress(completed_tasks / total_tasks)
             
@@ -482,7 +586,6 @@ def main():
             # Store results and enable download section
             st.session_state.research_results[company_name] = results
             st.session_state.last_research_company = company_name
-            st.session_state.show_download_section = True
             
             # Display results
             st.success(f"✅ Research completed for **{company_name}**!")
@@ -513,15 +616,7 @@ def main():
                         format_financial_data(data)
                     elif research_type == 'comprehensive':
                         st.header("📋 Comprehensive Company Data")
-                        if 'error' in data:
-                            st.error(f"❌ Error: {data['error']}")
-                        else:
-                            st.write(f"**Company:** {data.get('company_name', company_name)}")
-                            st.write(f"**Industry:** {data.get('industry', 'Unknown')}")
-                            st.write(f"**Description:** {data.get('description', 'N/A')}")
-                            
-                            if 'data_sources' in data:
-                                st.write(f"**Data Sources:** {', '.join(data['data_sources'])}")
+                        display_comprehensive_data(data)
         
         except Exception as e:
             st.error(f"❌ An error occurred during research: {str(e)}")
