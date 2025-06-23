@@ -1,179 +1,190 @@
+import pdb  # Python debugger
 from typing import Dict, Any, Union, List, Optional
 from ..services.gemini_service import GeminiService
 from ..services.web_scraper import WebScraper
-from ..utils.logger import setup_logger
+from ..utils.domain_validator import validate_domain, validate_domain_relevance
+from ..utils.logger import setup_logger, debug_print
+from ..utils.cache_manager import CacheManager
 
 logger = setup_logger()
 
 class CompanyExistenceChecker:
-    def __init__(self, gemini_service: GeminiService, web_scraper: WebScraper = None):
+    def __init__(self, gemini_service: GeminiService, web_scraper: WebScraper = None, cache_ttl: int = 86400):
         self.gemini_service = gemini_service
         self.web_scraper = web_scraper
+        self.cache_manager = CacheManager(cache_dir=".cache/company_existence", default_ttl=cache_ttl)
+        
+    def _debug_domain_validation(self, domain: str, validation_result: Dict[str, Any]):
+        """Helper method to debug domain validation results"""
+        debug_print({
+            'domain': domain,
+            'validation': validation_result
+        }, f"Domain Validation Results for {domain}")
     
     def check_company_exists(self, company_name: str, domains: Union[str, List[str]] = None) -> Dict[str, Any]:
         """
-        Check if a company exists using Gemini API and optionally verify domains.
+        Check if a company exists using Gemini API and verify domains.
+        Includes built-in debugging support.
         
         Args:
             company_name (str): Name of the company to check
             domains (Union[str, List[str]], optional): Company's website domain(s) to verify
             
         Returns:
-            Dict[str, Any]: A dictionary containing:
-                - company_name: Name of the company checked
-                - exists: Whether the company exists (True/False/"Error")
-                - reason: Explanation of the existence determination
-                - industry: Company's industry if found
-                - domains_verified: List of all checked domains with their verification status
-                - related_domains: List of domains confirmed to be related to the company
-                - unrelated_domains: List of domains found to be unrelated or suspicious
-            Returns:
-            dict: Information about the company's existence and domain verification
-        """        # Convert single domain to list for consistent handling
-        if isinstance(domains, str):
-            domains = [domains]
-            
-        result = {
-            "company_name": company_name,
-            "exists": False,
-            "reason": "",
-            "industry": "",
-            "domains_verified": [],
-            "unrelated_domains": [],  # List of domains found to be unrelated
-            "related_domains": []     # List of domains confirmed to be related
-        }
-
-        # First, check company existence using Gemini
-        prompt = f"""
-        I need to verify if a company called "{company_name}" exists. 
-        Please provide:
-        1. Whether this company likely exists (Yes, No, or Unclear)
-        2. A brief reason for your conclusion
-        3. What industry it appears to be in (if it exists)
+            Dict[str, Any]: Results of company existence check and domain validation
         
-        Format your response as JSON with keys: "exists", "reason", "industry"
+        Debug Tips:
+        - Set breakpoint using: import pdb; pdb.set_trace()
+        - Use debug_print() for complex data structures
+        - Check logger output for detailed validation steps
         """
+        # Check cache first
+        cache_key = {
+            'company_name': company_name,
+            'domains': domains if isinstance(domains, (list, type(None))) else [domains]
+        }
+        
+        cached_result = self.cache_manager.get('existence_check', cache_key)
+        if cached_result:
+            debug_print(cached_result, "Cache hit: Using cached result")
+            return cached_result
+            
+        # If not in cache, proceed with normal check
         try:
-            gemini_result = self.gemini_service.generate_response(prompt)
-            result.update(gemini_result)
+            # Debug: Initial parameters
+            debug_print({
+                'company_name': company_name,
+                'domains': domains
+            }, "Company Existence Check - Initial Parameters")
+
+            # Convert single domain to list for consistent processing
+            # Domains must be provided as an argument; do not fetch from scraper
+            if domains is None:
+                logger.warning("No domains provided to check_company_exists; expected domains as argument from caller.")
+                domain_list = []
+            elif isinstance(domains, str):
+                domain_list = [domains]
+            else:
+                domain_list = domains
+
+            # Ensure domains are not fetched from the web scraper
+            assert self.web_scraper is None or not hasattr(self.web_scraper, "fetch_domains"), (
+                "Domains must be provided by the caller, not fetched from the scraper."
+            )
+              # Validate each domain
+            domain_validations = {}
+            for domain in domain_list:
+                is_valid, validation_msg = validate_domain(domain)
+                validation_result = {
+                    'is_valid': is_valid,
+                    'status_message': validation_msg
+                }
+                
+                relevance_result = None
+                if is_valid:
+                    is_relevant, relevance_msg = validate_domain_relevance(domain, company_name)
+                    relevance_result = {
+                        'is_relevant': is_relevant,
+                        'status_message': relevance_msg
+                    }
+                
+                domain_validations[domain] = {
+                    'validation': validation_result,
+                    'relevance': relevance_result
+                }
+                  # Debug: Domain validation results
+                self._debug_domain_validation(domain, domain_validations[domain])
+                
+                # Optional debugging breakpoint
+                # Uncomment to debug specific domains:
+                # if domain == "example.com":
+                #     pdb.set_trace()
+              # Process Gemini response
+            domain_info = f"with domains: {', '.join(domain_list)}" if domain_list else "without any provided domains"
+            prompt = f"""
+            Analyze if the company "{company_name}" exists {domain_info}.
+
+            Look for these aspects:
+            1. Company existence verification
+            2. Industry identification
+            3. Business legitimacy assessment
             
-            # If web scraping is enabled, verify domains
-            if self.web_scraper and domains:
-                logger.info(f"Verifying domains for {company_name}: {domains}")
-                for domain in domains:
-                    try:
-                        domain_info = {
-                            "domain": domain,
-                            "verified": False,
-                            "status": "inaccessible",
-                            "company_related": False,
-                            "confidence": "low"
-                        }
-                        
-                        # First verify if domain is accessible
-                        if self.web_scraper.verify_domain(domain):
-                            domain_info["verified"] = True
-                            domain_info["status"] = "accessible"                            # Now check if domain is related to the company
-                            verify_prompt = f"""
-                            Strictly analyze if the domain "{domain}" is legitimately related to the company "{company_name}".
-                            
-                            Follow these validation steps and provide detailed analysis:
-                            1. Direct name comparison:
-                               - Check if company name or its parts are present in the domain
-                               - Identify any misspellings or variations
-                               - Calculate similarity score between company name and domain
-                            
-                            2. Brand verification:
-                               - Look for known brand names, products, or services of {company_name}
-                               - Check for subsidiary or parent company names
-                               - Verify legitimate business associations
-                            
-                            3. Risk assessment:
-                               - Flag any suspicious patterns or typosquatting attempts
-                               - Identify potential phishing or misleading domains
-                               - Check for common domain squatting patterns
-                               - Look for intentionally confusing similarities
-                            
-                            4. Validation rules:
-                               - Domain must contain company name or known brand
-                               - No suspicious character substitutions
-                               - Follow standard corporate domain patterns
-                               - Must not be a common phishing pattern
-                            
-                            Return your analysis as JSON with these keys:
-                            - "is_related": false unless domain passes ALL validation rules
-                            - "confidence": "high"/"medium"/"low"
-                            - "relationship_type": "direct" (exact match), "brand" (related brand/product), "subsidiary", or "unrelated"
-                            - "warning": any potential concerns about misleading similarities
-                            - "reason": detailed explanation of the relationship or lack thereof
-                            """
-                            domain_analysis = self.gemini_service.generate_response(verify_prompt)
-                            if isinstance(domain_analysis, dict):
-                                is_related = domain_analysis.get("is_related", False)
-                                domain_info["company_related"] = is_related
-                                domain_info["confidence"] = domain_analysis.get("confidence", "low")
-                                domain_info["relationship_type"] = domain_analysis.get("relationship_type", "unrelated")
-                                domain_info["relation_reason"] = domain_analysis.get("reason", "No analysis available")
-                                domain_info["warning"] = domain_analysis.get("warning", "Domain appears unrelated to the company")
-                                domain_info["validation_failed"] = not is_related
-                                domain_info["risk_level"] = domain_analysis.get("risk_level", "medium")
-                                
-                                # Add to appropriate list based on relationship
-                                if is_related:
-                                    result["related_domains"].append({
-                                        "domain": domain,
-                                        "relationship_type": domain_info["relationship_type"],
-                                        "confidence": domain_info["confidence"],
-                                        "reason": domain_info["relation_reason"]
-                                    })
-                                else:
-                                    # Enhanced unrelated domain info
-                                    result["unrelated_domains"].append({
-                                        "domain": domain,
-                                        "warning": domain_info["warning"],
-                                        "reason": domain_info["relation_reason"],
-                                        "risk_level": domain_info["risk_level"],
-                                        "validation_message": "⚠️ This domain failed validation checks and appears unrelated to the company.",
-                                        "recommendations": [
-                                            "Verify the domain is correct",
-                                            "Check for typos or misspellings",
-                                            "Ensure this is an official company domain",
-                                            "Be cautious of potential phishing attempts"
-                                        ]
-                                    })
-                                    
-                                    # Log warning for unrelated domains
-                                    logger.warning(f"Validation Failed: Domain '{domain}' appears unrelated to company '{company_name}'. "
-                                                 f"Reason: {domain_info['relation_reason']}")
-                            
-                        result["domains_verified"].append(domain_info)
-                        
-                    except Exception as e:
-                        logger.error(f"Error verifying domain {domain}: {e}")
-                        error_info = {
-                            "domain": domain,
-                            "verified": False,
-                            "status": f"error: {str(e)}",
-                            "company_related": False,
-                            "confidence": "low",
-                            "relationship_type": "unknown",
-                            "reason": "Could not analyze due to error"
-                        }
-                        result["domains_verified"].append(error_info)
-                        result["unrelated_domains"].append({
-                            "domain": domain,
-                            "warning": "Domain verification failed",
-                            "reason": f"Could not analyze due to error: {str(e)}"
-                        })
+            Respond in this exact JSON format:
+            {{
+                "exists": "Yes/No/Unclear",
+                "reason": "Brief explanation of your conclusion",
+                "industry": "Industry name if known, or null"
+            }}
+            """
             
+            try:
+                gemini_response = self.gemini_service.generate_response(prompt)
+                # Debug: Gemini response
+                debug_print(gemini_response, "Raw Gemini API Response")
+                
+                # Ensure we have valid response format
+                if not isinstance(gemini_response, dict) or "error" in gemini_response:
+                    logger.error(f"Invalid Gemini response: {gemini_response}")
+                    gemini_response = {
+                        "exists": "Unclear",
+                        "reason": "Could not verify company existence",
+                        "industry": None
+                    }
+            except Exception as e:
+                logger.error(f"Error processing Gemini response: {e}")
+                gemini_response = {
+                    "exists": "Error",
+                    "reason": str(e),
+                    "industry": None
+                }
+                
+            # Debug: Processed response
+            debug_print(gemini_response, "Processed Gemini Response")
+              # Calculate existence based on both domain validation and Gemini response
+            domain_exists = any(
+                v.get('validation', {}).get('is_valid', False) 
+                for v in domain_validations.values()
+            ) if domain_validations else None
+
+            gemini_exists = None
+            if gemini_response.get("exists"):
+                gemini_exists = {
+                    "yes": True,
+                    "no": False
+                }.get(gemini_response.get("exists", "").lower())
+
+            # Determine final existence status
+            exists = None
+            if domain_exists is not None and gemini_exists is not None:
+                exists = domain_exists and gemini_exists
+            elif domain_exists is not None:
+                exists = domain_exists
+            else:
+                exists = gemini_exists
+
+            result = {
+                'company_name': company_name,
+                'domains': domain_validations,
+                'domain_validation': {
+                    'exists': domain_exists,
+                    'valid_domains': [
+                        domain for domain, data in domain_validations.items()
+                        if data.get('validation', {}).get('is_valid', False)
+                    ] if domain_validations else []
+                },
+                'gemini_response': gemini_response,
+                'exists': exists,
+                'confidence': 'high' if domain_exists and gemini_exists is not None else 'medium' if domain_exists or gemini_exists is not None else 'low'
+            }
+            
+            # Final debug output
+            debug_print(result, "Final Check Results")
+            
+            # Cache the result before returning
+            self.cache_manager.set('existence_check', cache_key, result)
             return result
             
         except Exception as e:
-            logger.error(f"Error checking company existence for {company_name}: {e}")
-            return {
-                "company_name": company_name,
-                "exists": "Error",
-                "reason": str(e),
-                "industry": None,
-                "domains_verified": []
-            }
+            logger.error(f"Error in company existence check: {str(e)}")
+            debug_print(str(e), "Error in company_exists check")
+            raise

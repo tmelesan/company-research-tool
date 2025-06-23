@@ -7,6 +7,7 @@ import trafilatura
 from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse, urljoin
 from ..utils.logger import setup_logger
+from ..utils.domain_validator import validate_domain, validate_domain_relevance
 
 logger = setup_logger()
 
@@ -97,35 +98,82 @@ class WebScraper:
                 "error": str(e)
             }
     
-    def verify_domain(self, domain: str) -> bool:
+    def verify_domain(self, domain: str) -> Dict[str, Any]:
         """
-        Verify if a domain is accessible and returns a valid response.
+        Verify if a domain is accessible and returns a valid response with detailed status.
         
         Args:
             domain (str): The domain to verify (e.g., 'example.com')
             
         Returns:
-            bool: True if domain is accessible, False otherwise
+            dict: A dictionary containing verification results:
+                - exists (bool): True if domain is accessible
+                - status (str): Detailed status message
+                - https_enabled (bool): True if HTTPS is supported
         """
         try:
-            # Ensure domain has a scheme
-            if not domain.startswith(('http://', 'https://')):
-                domain = f'https://{domain}'
+            result = {
+                "exists": False,
+                "status": "",
+                "https_enabled": False
+            }
+
+            # Basic format validation
+            if not domain or not '.' in domain:
+                result["status"] = "Invalid domain format"
+                return result
+
+            # Clean the domain
+            domain = domain.strip().lower()
+            if domain.startswith(('http://', 'https://')):
+                parsed = urlparse(domain)
+                domain = parsed.netloc
             
-            # Parse the domain to ensure it's valid
-            parsed = urlparse(domain)
-            if not parsed.netloc:
-                return False
-                
-            # Try to access the domain
-            response = requests.get(domain, 
-                                 headers={'User-Agent': self.user_agent},
-                                 timeout=self.timeout,
-                                 allow_redirects=True)
+            # Try HTTPS first
+            try:
+                response = requests.head(
+                    f'https://{domain}',
+                    headers=self.headers,
+                    timeout=self.timeout,
+                    allow_redirects=True
+                )
+                if response.status_code < 400:
+                    result.update({
+                        "exists": True,
+                        "status": "Domain accessible via HTTPS",
+                        "https_enabled": True
+                    })
+                    return result
+            except requests.RequestException:
+                # HTTPS failed, try HTTP
+                pass
             
-            # Check if we got a successful response
-            return response.status_code == 200
+            # Try HTTP if HTTPS failed
+            try:
+                response = requests.head(
+                    f'http://{domain}',
+                    headers=self.headers,
+                    timeout=self.timeout,
+                    allow_redirects=True
+                )
+                if response.status_code < 400:
+                    result.update({
+                        "exists": True,
+                        "status": "Domain accessible via HTTP only",
+                        "https_enabled": False
+                    })
+                    return result
+            except requests.RequestException as e:
+                result["status"] = f"Domain unreachable: {str(e)}"
+                return result
+            
+            result["status"] = f"Domain returned error status: {response.status_code}"
+            return result
             
         except Exception as e:
             logger.debug(f"Error verifying domain {domain}: {str(e)}")
-            return False
+            return {
+                "exists": False,
+                "status": f"Verification error: {str(e)}",
+                "https_enabled": False
+            }

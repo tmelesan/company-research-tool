@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union, List
 from .services.gemini_service import GeminiService
 from .services.web_scraper import WebScraper
 from .services.financial_service import FinancialService
@@ -36,12 +36,18 @@ class CompanyResearcher:
         self.competitive_analyzer = CompetitiveAnalysisExtractor(self.gemini_service)
         self.financials_extractor = CompanyFinancialsExtractor(self.gemini_service, self.web_scraper, self.financial_service)
         self.data_extractor = CompanyDataExtractor(self.gemini_service, self.web_scraper)
-    
-    def check_company_exists(self, company_name: str) -> Dict[str, Any]:
+    def check_company_exists(self, company_name: str, domains: Union[str, List[str]] = None) -> Dict[str, Any]:
         """
-        Check if a company exists using Gemini API.
+        Check if a company exists using Gemini API and validate associated domains.
+        
+        Args:
+            company_name (str): Name of the company to check
+            domains (Union[str, List[str]], optional): Company's website domain(s) to verify
+            
+        Returns:
+            Dict[str, Any]: Results of company existence check and domain validation
         """
-        return self.existence_checker.check_company_exists(company_name)
+        return self.existence_checker.check_company_exists(company_name, domains)
     
     def get_company_products_services(self, company_name: str) -> Dict[str, Any]:
         """

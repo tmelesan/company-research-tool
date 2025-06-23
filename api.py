@@ -8,7 +8,7 @@ exposing all research capabilities through HTTP endpoints.
 
 import os
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 from fastapi import FastAPI, HTTPException, Query, Path
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -25,12 +25,12 @@ logger = logging.getLogger(__name__)
 # Pydantic models for request/response validation
 class CompanyExistenceResponse(BaseModel):
     """Response model for company existence check"""
-    exists: str = Field(..., description="Whether the company exists (Yes/No/Unclear)")
+    exists: Union[str, bool] = Field(..., description="Whether the company exists (Yes/No/Unclear or boolean)")
     reason: Optional[str] = Field(None, description="Reason for the conclusion")
     industry: Optional[str] = Field(None, description="Industry if company exists")
-    website_found: Optional[bool] = Field(None, description="Whether a website was found")
-    website: Optional[str] = Field(None, description="Company website URL")
-    domain: Optional[str] = Field(None, description="Company domain")
+    confidence: Optional[str] = Field(None, description="Confidence level of the existence check")
+    domains: Optional[Dict[str, Any]] = Field(None, description="Domain validation results")
+    domain_validation: Optional[Dict[str, Any]] = Field(None, description="Domain validation summary")
 
 class ProductsServicesResponse(BaseModel):
     """Response model for products and services"""
@@ -143,15 +143,28 @@ async def health_check():
          summary="Check if company exists",
          description="Verify if a company exists and get basic information")
 async def check_company_exists(
-    company_name: str = Path(..., description="Name of the company to check", min_length=1)
+    company_name: str = Path(..., description="Name of the company to check", min_length=1),
+    domain: Optional[str] = Query(None, description="Company domain to verify")
 ):
     """Check if a company exists"""
     try:
         if not researcher:
             raise HTTPException(status_code=503, detail="Service not initialized")
         
-        result = researcher.check_company_exists(company_name)
-        return result  # Return raw result, Pydantic will validate and convert
+        # Call with provided domain or without one
+        result = researcher.check_company_exists(company_name, domain)
+        
+        # Ensure the response matches our API model
+        response = {
+            "exists": result.get("exists", "Unclear"),
+            "reason": result.get("gemini_response", {}).get("reason"),
+            "industry": result.get("gemini_response", {}).get("industry"),
+            "confidence": result.get("confidence"),
+            "domains": result.get("domains"),
+            "domain_validation": result.get("domain_validation")
+        }
+        
+        return response
     except Exception as e:
         logger.error(f"Error checking company existence for {company_name}: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

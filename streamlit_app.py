@@ -9,24 +9,68 @@ import streamlit as st
 import json
 import sys
 import os
-from typing import Dict, Any, Optional
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime
+from typing import Dict, Any, List, Optional
+from src.utils.domain_validator import validate_domain, validate_domain_relevance
+from src.company_researcher import CompanyResearcher
+from src.utils.logger import debug_print
+
+# Define status icons and colors for domain validation
+STATUS_ICONS = {
+    "success": "✅",
+    "warning": "⚠️",
+    "error": "❌",
+    "info": "ℹ️"
+}
+
+# Debug mode toggle in session state
+if 'debug_mode' not in st.session_state:
+    st.session_state.debug_mode = False
 
 # Add the current directory to the Python path
 sys.path.insert(0, os.path.dirname(__file__))
 
-from src.company_researcher import CompanyResearcher
+from src.services.web_scraper import WebScraper
 
-# Page configuration
-st.set_page_config(
-    page_title="Company Research Tool",
-    page_icon="🔍",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Page configuration and debug controls
+st.set_page_config(page_title="Company Research Tool", layout="wide")
+
+# Debug Mode Controls (in sidebar)
+with st.sidebar:
+    st.session_state.debug_mode = st.checkbox("Enable Debug Mode", value=st.session_state.debug_mode)
+    if st.session_state.debug_mode:
+        st.info("Debug mode is enabled. Additional information will be shown.")
+        
+def debug_section(title: str, data: Any):
+    """Helper function to show debug information in the UI"""
+    if st.session_state.debug_mode:
+        with st.expander(f"🔍 Debug: {title}", expanded=False):
+            st.json(data if isinstance(data, (dict, list)) else str(data))
+            
+def validate_and_debug_domain(domain: str, company_name: str = None) -> Dict[str, Any]:
+    """Validate a domain with debug information"""
+    is_valid, validation_msg = validate_domain(domain)
+    
+    validation_result = {
+        'is_valid': is_valid,
+        'status_message': validation_msg
+    }
+    
+    debug_print(validation_result, f"Domain Validation for {domain}")
+    
+    if is_valid and company_name:
+        is_relevant, relevance_msg = validate_domain_relevance(domain, company_name)
+        relevance_result = {
+            'is_relevant': is_relevant,
+            'status_message': relevance_msg
+        }
+        debug_print(relevance_result, f"Domain Relevance for {domain}")
+        validation_result['relevance'] = relevance_result
+    
+    if st.session_state.debug_mode:
+        debug_section(f"Domain Validation: {domain}", validation_result)
+    
+    return validation_result
 
 # Custom CSS for better styling
 st.markdown("""
@@ -331,11 +375,15 @@ def create_summary_dashboard(results: Dict[str, Any], company_name: str) -> None
     
     # Company existence
     exists_data = results.get('existence', {})
+
     exists = exists_data.get('exists', 'Unknown')
-    col1.metric("Company Status", "✅ Verified" if exists == 'Yes' else "❓ Unverified")
+    col1.metric("Company Status", "✅ Verified" if exists == True else "❓ Unverified")
     
     # Industry
-    industry = exists_data.get('industry', 'Unknown')
+    # Industry metric (prefer Gemini response, fallback to others)
+    industry = (exists_data.get('gemini_response', {}) or {}).get('industry') \
+        or exists_data.get('industry') \
+        or results.get('comprehensive', {}).get('industry', 'Unknown')
     col2.metric("Industry", industry)
     
     # Data sources count
@@ -383,71 +431,97 @@ def create_summary_dashboard(results: Dict[str, Any], company_name: str) -> None
         if 'financials' in results:
             format_financial_data(results['financials'])
 
-def manage_domains():
+def manage_domains(company_name: str = None) -> List[str]:
     """Domain management section in the sidebar."""
     st.sidebar.markdown("### 🌐 Domain Management")
-    
-    # Single domain input
-    new_domain = st.sidebar.text_input(
-        "Add Domain:",
-        placeholder="e.g., example.com",
-        help="Enter a domain name without http:// or www"
-    )
-    
-    # Bulk domain input
-    st.sidebar.markdown("#### Bulk Add Domains")
-    bulk_domains = st.sidebar.text_area(
-        "Add Multiple Domains:",
-        placeholder="Enter domains separated by commas or new lines",
-        help="Enter multiple domains separated by commas or new lines"
-    )
-    
-    # Add domain button
-    col1, col2 = st.sidebar.columns([1, 1])
-    with col1:
-        if st.button("Add Domain", key="add_single_domain"):
-            if new_domain:
-                if new_domain not in st.session_state.domains:
-                    st.session_state.domains.append(new_domain.strip())
-                    st.success(f"Added domain: {new_domain}")
-                else:
-                    st.warning("Domain already exists!")
-    
-    with col2:
-        if st.button("Add Bulk", key="add_bulk_domains"):
-            if bulk_domains:
-                # Split by commas and newlines
-                new_domains = [d.strip() for d in bulk_domains.replace('\n', ',').split(',')]
-                new_domains = [d for d in new_domains if d]  # Remove empty strings
-                
-                # Add unique domains
-                added = 0
-                for domain in new_domains:
-                    if domain not in st.session_state.domains:
-                        st.session_state.domains.append(domain)
-                        added += 1
-                
-                if added > 0:
-                    st.success(f"Added {added} new domain(s)")
-                else:
-                    st.info("No new domains to add")
-    
-    # Display and manage current domains
-    if st.session_state.domains:
-        st.sidebar.markdown("#### Current Domains")
-        for i, domain in enumerate(st.session_state.domains):
-            col1, col2 = st.sidebar.columns([3, 1])
-            with col1:
-                st.text(domain)
-            with col2:
-                if st.button("🗑️", key=f"remove_{i}"):
-                    st.session_state.domains.pop(i)
-                    st.rerun()
+
+    # Initialize session state for domains if not exists
+    if 'domains' not in st.session_state:
+        st.session_state.domains = []
         
-        if st.sidebar.button("Clear All Domains"):
+    if 'domain_validation_results' not in st.session_state:
+        st.session_state.domain_validation_results = {
+            "valid": [],
+            "warnings": [],
+            "errors": []
+        }
+
+    # Domain input
+    bulk_domains = st.sidebar.text_area(
+        "Add Domains",
+        key="bulk_domains",
+        help="Enter multiple domains separated by commas or new lines. Example:\nexample1.com\nexample2.com, example3.com"
+    )
+
+    # Domain validation and addition
+    if st.sidebar.button("Add Domains", key="add_bulk_domains", type="primary"):
+        if bulk_domains:
+            new_domains = [d.strip() for d in bulk_domains.replace('\n', ',').split(',')]
+            new_domains = [d for d in new_domains if d]
+            
+            for domain in new_domains:
+                if domain not in st.session_state.domains:
+                    # Validate the domain
+                    validation_result = validate_and_debug_domain(domain, company_name)
+                    existence_msg = validation_result.get('status_message', '')
+                    
+                    if validation_result.get('is_valid'):
+                        if 'relevance' in validation_result:
+                            relevance_msg = validation_result['relevance'].get('status_message', '')
+                            if validation_result['relevance'].get('is_relevant'):
+                                st.session_state.domain_validation_results["valid"].append((domain, existence_msg))
+                            else:
+                                st.session_state.domain_validation_results["warnings"].append(
+                                    (domain, f"{existence_msg}, but {relevance_msg}")
+                                )
+                        else:
+                            st.session_state.domain_validation_results["valid"].append((domain, existence_msg))
+                    else:
+                        st.session_state.domain_validation_results["errors"].append((domain, existence_msg))
+
+            # Add valid domains to session state
+            for domain, _ in st.session_state.domain_validation_results["valid"]:
+                if domain not in st.session_state.domains:
+                    st.session_state.domains.append(domain)
+
+    # Display validation summary
+    if any(st.session_state.domain_validation_results.values()):
+        with st.sidebar.container():
+            st.markdown('<div class="validation-summary">', unsafe_allow_html=True)
+            
+            if st.session_state.domain_validation_results["valid"]:
+                st.markdown("#### ✅ Valid Domains")
+                for domain, msg in st.session_state.domain_validation_results["valid"]:
+                    st.markdown(f"• {domain}: {msg}")
+            
+            if st.session_state.domain_validation_results["warnings"]:
+                st.markdown("#### ⚠️ Warnings")
+                for domain, msg in st.session_state.domain_validation_results["warnings"]:
+                    st.markdown(f"• {domain}: {msg}")
+            
+            if st.session_state.domain_validation_results["errors"]:
+                st.markdown("#### ❌ Invalid Domains")
+                for domain, msg in st.session_state.domain_validation_results["errors"]:
+                    st.markdown(f"• {domain}: {msg}")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    # Current domains list
+    if st.session_state.domains:
+        st.sidebar.markdown("### Current Domains")
+        for domain in st.session_state.domains:
+            st.sidebar.markdown(f"• {domain}")
+            
+        if st.sidebar.button("Clear All Domains", key="clear_domains"):
             st.session_state.domains = []
+            st.session_state.domain_validation_results = {
+                "valid": [],
+                "warnings": [],
+                "errors": []
+            }
             st.rerun()
-    
+
+    # Return list of valid domains
     return st.session_state.domains
 
 def display_comprehensive_data(data: Dict[str, Any]) -> None:
@@ -467,6 +541,28 @@ def display_comprehensive_data(data: Dict[str, Any]) -> None:
         
         if 'data_sources' in data:
             st.write(f"**Data Sources:** {', '.join(data['data_sources'])}")
+
+def validate_domain_existence(domain: str) -> tuple[bool, str]:
+    """
+    Validate if a domain exists and is accessible.
+    """
+    try:
+        # Basic format validation
+        if not domain or not '.' in domain:
+            return False, "Invalid domain format"
+
+        scraper = WebScraper()
+        result = scraper.verify_domain(domain)
+        
+        if result["exists"]:
+            status = "✅ " + result["status"]
+            if not result["https_enabled"]:
+                status += " (Warning: HTTPS not supported)"
+            return True, status
+        else:
+            return False, "❌ " + result["status"]
+    except Exception as e:
+        return False, f"❌ Error validating domain: {str(e)}"
 
 def main():
     """Main Streamlit application."""
@@ -534,13 +630,21 @@ def main():
             results = {}
             total_tasks = sum(research_options.values())
             completed_tasks = 0
-            
-            # Execute research tasks
+              # Execute research tasks
             if research_options['existence']:
                 status_text.text("🔍 Checking company existence...")
-                results['existence'] = researcher.check_company_exists(company_name)
-                completed_tasks += 1
-                progress_bar.progress(completed_tasks / total_tasks)
+                try:
+                    results['existence'] = researcher.check_company_exists(company_name, domains)
+                    completed_tasks += 1
+                    progress_bar.progress(completed_tasks / total_tasks)
+                except Exception as e:
+                    st.error(f"Error checking company existence: {str(e)}")
+                    debug_print(f"Company existence check failed: {str(e)}")
+                    results['existence'] = {
+                        "error": str(e),
+                        "exists": "Error",
+                        "reason": "Failed to check company existence"
+                    }
             
             if research_options['products_services']:
                 status_text.text("📦 Extracting products and services...")
@@ -567,9 +671,29 @@ def main():
                 progress_bar.progress(completed_tasks / total_tasks)
             
             if research_options['financials']:
-                status_text.text("💰 Extracting financial data...")
-                # Pass all configured domains to the financial extractor
-                results['financials'] = researcher.get_company_financials(company_name, domain=domains[0] if domains else None)
+                status_text.text("💰 Extracting financial data...")                # Pass all configured domains to the financial extractor
+                # Try each valid domain until we get financial data
+                financial_data = None
+                domain_used = None
+                
+                for domain in domains:
+                    try:
+                        financial_data = researcher.get_company_financials(company_name, domain=domain)
+                        if financial_data and financial_data.get('data_available', False):
+                            domain_used = domain
+                            break
+                    except Exception as e:
+                        debug_print(f"Failed to get financials from {domain}: {str(e)}")
+                        continue
+                
+                if financial_data:
+                    financial_data['domain_used'] = domain_used
+                    results['financials'] = financial_data
+                else:
+                    results['financials'] = {
+                        'error': 'Could not retrieve financial data from any provided domain',
+                        'data_available': False
+                    }
                 completed_tasks += 1
                 progress_bar.progress(completed_tasks / total_tasks)
             
